@@ -1,0 +1,15 @@
+//esp32 tester
+#include <Arduino.h>
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+
+  Serial.println("=== ESP32 Chip Info ===");
+
+  Serial.printf("Model    : %s\n", ESP.getChipModel());
+  Serial.printf("Cores    : %d\n", ESP.getChipCores());
+  Serial.printf("Revision : %d\n", ESP.getChipRevision());
+}
+
+void loop() {}
