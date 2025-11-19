@@ -1,0 +1,17 @@
+void setup() {
+  Serial.begin(38400);  // Baud rate 38400, 8N1 by default
+}
+
+void loop() {
+  Serial.println("Hello");
+  delay(500);           // Delay to separate transmissions
+}
+
+
+//calc:
+//Baudrate: 38400 bits/s  Tbit= 1/38400 = 26,04us
+//Half-bit:  Thalf= Tbit/2 = 13,02us
+//Frame = 1 start + 8 data bits + 1stops = 10 bits
+//Total frame duration = 10 * 26,04 us = 260,4 us
+
+
