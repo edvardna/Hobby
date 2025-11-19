@@ -14,4 +14,17 @@ void loop() {
 //Frame = 1 start + 8 data bits + 1stops = 10 bits
 //Total frame duration = 10 * 26,04 us = 260,4 us
 
+//scope setup
+//      ch1 - D1(tx pin)
+//      GND - GND
+//      Trigger on falling edge (UART start bit = line goes LOW)
+//      Display sclae around 10-20us/div
+//      idle line = high start = low -> last 26us
+//      half-bit time measurement place cursor at the midle of the start bit measure calues hould be 13 us
+//      stop bit = line retuns high for one bit period of 26us
+//      compare resaults
+
+
+
+
 
