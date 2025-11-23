@@ -1,0 +1,45 @@
+//relay turning on/off with serial monitor
+
+int relayPin = 7;   // Relay control pin
+
+String input = "";  // Stores serial input
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW);  // Relay OFF at start
+
+  Serial.println("Relay control ready.");
+  Serial.println("Type 'on' or 'off' and press Enter.");
+}
+
+void loop() {
+  if (Serial.available()) {
+    input = Serial.readStringUntil('\n');  // Read input line
+    input.trim(); // Remove spaces/newlines
+
+    if (input.equalsIgnoreCase("on")) {
+      digitalWrite(relayPin, HIGH);
+      Serial.println("Relay ON");
+    }
+    else if (input.equalsIgnoreCase("off")) {
+      digitalWrite(relayPin, LOW);
+      Serial.println("Relay OFF");
+    }
+    else {
+      Serial.println("Unknown command. Type 'on' or 'off'.");
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+//
+
+
