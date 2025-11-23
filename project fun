@@ -40,6 +40,66 @@ void loop() {
 
 
 
-//
+//moisture sensor
+int sensorPin = A0;  // Analog pin connected to sensor
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Soil moisture sensor ready");
+}
+
+void loop() {
+  int value = analogRead(sensorPin);
+
+  // Convert value to percentage (optional)
+  int percent = map(value, 350, 1023, 100, 0);  
+  // Adjust the 350 for your dry reading calibration
+
+  Serial.print("Raw: ");
+  Serial.print(value);
+  Serial.print("   Moisture: ");
+  Serial.print(percent);
+  Serial.println("%");
+
+  delay(1000);
+}
+
+//Raw values range roughly from:
+
+//~280–400 = very wet
+
+//~500–700 = moist
+
+//~800–1023 = dry
+
+//Every sensor is different → calibrate like this:
+
+//Put the sensor in dry soil, note the value (example: 900)
+
+//Put it in water-saturated soil, note the value (example: 350)
+
+//Replace these numbers:
+int percent = map(value, 350, 900, 100, 0);
+
+
+
+int sensorPin = A0;
+int smoothValue = 0;
+
+void setup() {
+  Serial.begin(9600);
+}
+
+void loop() {
+  smoothValue = (smoothValue * 0.9) + (analogRead(sensorPin) * 0.1);
+
+  Serial.print("Smoothed: ");
+  Serial.println(smoothValue);
+
+  delay(500);
+}
+
+
+//screen
 
 
