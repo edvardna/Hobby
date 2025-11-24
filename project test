@@ -1,0 +1,274 @@
+// ------------------------------------------------------------
+// Smart Plant Node (ATmega328P / Arduino Uno)
+// - Bare-metal: UART, ADC (LDR + soil), Timer1 ultrasonic
+// - Library: DHT22, SSD1306 OLED (I2C)
+// ------------------------------------------------------------
+
+#define F_CPU 16000000UL
+
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdlib.h>
+#include <math.h>
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "DHT.h"
+
+// ---------------- OLED SETUP ----------------
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1          // using I2C only, no reset pin
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// ---------------- PIN DEFINITIONS ----------------
+
+// LDR = A0 (ADC0)
+#define LDR_ADC_CH   0
+
+// Soil moisture = A1 (ADC1)
+#define SOIL_ADC_CH  1
+
+// DHT22 on D7
+#define DHTPIN 7
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
+// Ultrasonic: TRIG = D9 (PB1), ECHO = D10 (PB2)
+#define TRIG_PORT PORTB
+#define TRIG_DDR  DDRB
+#define TRIG_BIT  PB1
+
+#define ECHO_PINR PINB
+#define ECHO_DDR  DDRB
+#define ECHO_BIT  PB2
+
+// Soil calibration (adjust for your sensor)
+int soilWet = 350;   // ADC value in wet soil
+int soilDry = 900;   // ADC value in dry soil
+
+// ---------------- UART (bare-metal USART0) ----------------
+
+void uart_init(uint32_t baud) {
+  uint16_t ubrr = (F_CPU / (16UL * baud)) - 1;
+  UBRR0H = ubrr >> 8;
+  UBRR0L = ubrr & 0xFF;
+
+  UCSR0A = 0;
+  UCSR0B = (1 << TXEN0);                  // enable TX
+  UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); // 8N1
+}
+
+void uart_tx(char c) {
+  while (!(UCSR0A & (1 << UDRE0)));
+  UDR0 = c;
+}
+
+void uart_print(const char *s) {
+  while (*s) uart_tx(*s++);
+}
+
+void uart_print_int(long v) {
+  char buf[16];
+  ltoa(v, buf, 10);
+  uart_print(buf);
+}
+
+// ---------------- ADC (bare-metal) ----------------
+
+void adc_init() {
+  ADMUX = (1 << REFS0);  // AVcc reference
+  ADCSRA = (1 << ADEN)   // enable ADC
+         | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // prescaler 128
+}
+
+uint16_t adc_read(uint8_t ch) {
+  ADMUX = (ADMUX & 0xF0) | (ch & 0x07);
+  ADCSRA |= (1 << ADSC);                 // start conversion
+  while (ADCSRA & (1 << ADSC));          // wait until done
+  return ADC;
+}
+
+// ---------------- Ultrasonic (Timer1 bare-metal) ----------------
+
+void timer1_init() {
+  TCCR1A = 0;
+  TCCR1B = (1 << CS11);  // prescaler 8 -> 0.5µs per tick
+}
+
+uint16_t echo_pulse_us() {
+  uint16_t timeout = 0;
+
+  // wait for echo low
+  while (ECHO_PINR & (1 << ECHO_BIT))
+    if (++timeout > 30000) return 0;
+
+  // wait for rising edge
+  timeout = 0;
+  while (!(ECHO_PINR & (1 << ECHO_BIT)))
+    if (++timeout > 30000) return 0;
+
+  // measure high pulse
+  TCNT1 = 0;
+  while (ECHO_PINR & (1 << ECHO_BIT)) {
+    if (TCNT1 > 60000) break;
+  }
+
+  return TCNT1 / 2; // ticks (0.5µs) -> microseconds
+}
+
+uint16_t get_distance_cm() {
+  TRIG_PORT &= ~(1 << TRIG_BIT);
+  _delay_us(5);
+  TRIG_PORT |= (1 << TRIG_BIT);
+  _delay_us(12);
+  TRIG_PORT &= ~(1 << TRIG_BIT);
+
+  uint16_t dur_us = echo_pulse_us();
+  return (dur_us * 34UL) / 2000UL; // distance in cm
+}
+
+// ---------------- Helpers ----------------
+
+const char* classify_light(uint16_t ldr) {
+  if (ldr < 200) return "Dark";
+  else if (ldr < 500) return "Dim";
+  else if (ldr < 800) return "Daylight";
+  else return "Very bright";
+}
+
+// ---------------- setup() ----------------
+
+void setup() {
+  // Bare-metal subsystems
+  uart_init(9600);
+  adc_init();
+  timer1_init();
+
+  // Ultrasonic pins
+  TRIG_DDR |= (1 << TRIG_BIT);   // TRIG output
+  ECHO_DDR &= ~(1 << ECHO_BIT);  // ECHO input
+
+  // DHT22 library
+  dht.begin();
+
+  // OLED init
+  Wire.begin();
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // I2C addr 0x3C
+    // If OLED fails, just keep UART running
+    uart_print("\r\nOLED init failed\r\n");
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println(F("Smart Plant Node"));
+  display.println(F("Initializing..."));
+  display.display();
+
+  uart_print("\r\nBare-metal + OLED + DHT ready\r\n");
+
+  // DHT22 warm-up
+  _delay_ms(2000);
+}
+
+// ---------------- loop() ----------------
+
+void loop() {
+  // ---------- Read ADC sensors ----------
+  uint16_t ldr  = adc_read(LDR_ADC_CH);
+  uint16_t soil = adc_read(SOIL_ADC_CH);
+
+  int soilPercent = 100 - ((soil - soilWet) * 100L / (soilDry - soilWet));
+  if (soilPercent < 0) soilPercent = 0;
+  if (soilPercent > 100) soilPercent = 100;
+
+  const char* lightLevel = classify_light(ldr);
+
+  // ---------- DHT22 (with library) ----------
+  float temp = dht.readTemperature();
+  float hum  = dht.readHumidity();
+  bool dhtOK = !isnan(temp) && !isnan(hum);
+
+  // ---------- Ultrasonic ----------
+  _delay_ms(5); // small gap so DHT isn't disturbed
+  uint16_t dist = get_distance_cm();
+
+  // ---------- UART output ----------
+  uart_print("\r\n===== SENSOR DATA =====\r\n");
+
+  uart_print("LDR: ");
+  uart_print_int(ldr);
+  uart_print(" | ");
+  uart_print(lightLevel);
+  uart_print("\r\n");
+
+  uart_print("Soil: ");
+  uart_print_int(soil);
+  uart_print(" | ");
+  uart_print_int(soilPercent);
+  uart_print("%\r\n");
+
+  uart_print("DHT22: ");
+  if (dhtOK) {
+    long t10 = (long)(temp * 10);
+    long h10 = (long)(hum  * 10);
+
+    uart_print("T=");
+    uart_print_int(t10 / 10); uart_tx('.');
+    uart_print_int(labs(t10 % 10));
+    uart_print(" C, H=");
+    uart_print_int(h10 / 10); uart_tx('.');
+    uart_print_int(labs(h10 % 10));
+    uart_print(" %\r\n");
+  } else {
+    uart_print("Read error\r\n");
+  }
+
+  uart_print("Distance: ");
+  uart_print_int(dist);
+  uart_print(" cm\r\n");
+
+  // ---------- OLED output (layout A) ----------
+  display.clearDisplay();
+  display.setCursor(0, 0);
+
+  // Line 1: Light
+  display.print(F("Light: "));
+  display.println(lightLevel);
+
+  // Line 2: Soil %
+  display.print(F("Soil : "));
+  display.print(soilPercent);
+  display.println(F("%"));
+
+  // Line 3: Temp
+  display.print(F("Temp : "));
+  if (dhtOK) {
+    display.print(temp, 1);
+    display.println(F(" C"));
+  } else {
+    display.println(F("--.- C"));
+  }
+
+  // Line 4: Humidity
+  display.print(F("Hum  : "));
+  if (dhtOK) {
+    display.print(hum, 1);
+    display.println(F(" %"));
+  } else {
+    display.println(F("--.- %"));
+  }
+
+  // Line 5: Distance
+  display.print(F("Dist : "));
+  display.print(dist);
+  display.println(F(" cm"));
+
+  display.display();
+
+  _delay_ms(1200);
+}
