@@ -265,3 +265,35 @@ void loop() {
 }
 
 
+
+
+
+
+
+
+
+//DH22 temp. hum. sensor
+
+#include "DHT.h"
+
+#define DHTPIN 7
+#define DHTTYPE DHT22
+
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  Serial.println("DHT22 test");
+}
+
+void loop() {
+  delay(2000);  // IMPORTANT for DHT22
+
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+
+  Serial.print("H = "); Serial.print(h);
+  Serial.print("  T = "); Serial.println(t);
+}
+
