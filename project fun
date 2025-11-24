@@ -227,3 +227,41 @@ void testScroll() {
 
 
 
+
+
+
+
+
+
+// light sensor (photoresistor)
+
+const int sensorPin = A0;
+
+void setup() {
+  Serial.begin(9600);
+}
+
+void loop() {
+  int sensorValue = analogRead(sensorPin);
+  String level;
+
+  // Light level classification
+  if (sensorValue < 200) {
+    level = "Dark";
+  } else if (sensorValue < 500) {
+    level = "Dim";
+  } else if (sensorValue < 800) {
+    level = "Daylight";
+  } else {
+    level = "Very bright";
+  }
+
+  Serial.print("LDR Value = ");
+  Serial.print(sensorValue);
+  Serial.print("   |   ");
+  Serial.println(level);
+
+  delay(200);
+}
+
+
