@@ -297,3 +297,73 @@ void loop() {
   Serial.print("  T = "); Serial.println(t);
 }
 
+
+
+
+
+
+
+
+
+// distance and screen tester
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+// Ultrasonic pins
+#define TRIG 9
+#define ECHO 10
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+
+  // ---- OLED ----
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {  
+    Serial.println("SSD1306 NOT FOUND!");
+  } else {
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("READY");
+    display.display();
+  }
+
+  Serial.println("System Ready");
+}
+
+void loop() {
+  // Trigger pulse
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+
+  // Read distance
+  long duration = pulseIn(ECHO, HIGH);
+  float distance = duration * 0.0343 / 2;
+
+  // Serial output ONLY distance
+  Serial.println(distance);
+
+  // OLED output
+  display.clearDisplay();
+  display.setCursor(0, 20);
+  display.print(distance, 1);
+  display.print(" cm");
+  display.display();
+
+  delay(100);
+}
+
+
+
+
